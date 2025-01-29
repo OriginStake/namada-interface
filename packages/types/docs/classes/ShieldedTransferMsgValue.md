@@ -31,7 +31,7 @@
 
 #### Defined in
 
-[tx/schema/transfer.ts:78](https://github.com/anoma/namada-interface/blob/be532c799367420fcc6a8d60ac3b6b3a194f2891/packages/types/src/tx/schema/transfer.ts#L78)
+[tx/schema/transfer.ts:78](https://github.com/anoma/namada-interface/blob/04cc0e2c5bbf957adca124841118cb1e5cb7bcab/packages/types/src/tx/schema/transfer.ts#L78)
 
 ## Properties
 
@@ -41,7 +41,7 @@
 
 #### Defined in
 
-[tx/schema/transfer.ts:73](https://github.com/anoma/namada-interface/blob/be532c799367420fcc6a8d60ac3b6b3a194f2891/packages/types/src/tx/schema/transfer.ts#L73)
+[tx/schema/transfer.ts:73](https://github.com/anoma/namada-interface/blob/04cc0e2c5bbf957adca124841118cb1e5cb7bcab/packages/types/src/tx/schema/transfer.ts#L73)
 
 ___
 
@@ -51,4 +51,4 @@ ___
 
 #### Defined in
 
-[tx/schema/transfer.ts:76](https://github.com/anoma/namada-interface/blob/be532c799367420fcc6a8d60ac3b6b3a194f2891/packages/types/src/tx/schema/transfer.ts#L76)
+[tx/schema/transfer.ts:76](https://github.com/anoma/namada-interface/blob/04cc0e2c5bbf957adca124841118cb1e5cb7bcab/packages/types/src/tx/schema/transfer.ts#L76)

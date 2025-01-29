@@ -12,10 +12,10 @@ import {
   disposableSignerAtom,
 } from "atoms/accounts";
 import { chainAtom, nativeTokenAddressAtom } from "atoms/chain";
-import { indexerUrlAtom, maspIndexerUrlAtom, rpcUrlAtom } from "atoms/settings";
+import { maspIndexerUrlAtom, rpcUrlAtom } from "atoms/settings";
 import BigNumber from "bignumber.js";
 import { useAtom, useAtomValue } from "jotai";
-import { signTx } from "lib/query";
+import { isPublicKeyRevealed, signTx } from "lib/query";
 import { Shield, ShieldedTransfer, Unshield } from "workers/MaspTxMessages";
 import {
   Worker as MaspTxWorkerApi,
@@ -33,7 +33,6 @@ export function WorkerTest(): JSX.Element {
   const { data: accounts } = useAtomValue(accountsAtom);
   const { data: chain } = useAtomValue(chainAtom);
   const { data: token } = useAtomValue(nativeTokenAddressAtom);
-  const indexerUrl = useAtomValue(indexerUrlAtom);
   const maspIndexerUrl = useAtomValue(maspIndexerUrlAtom);
   const shieldedAccount = accounts?.find(
     (a) => a.type === AccountType.ShieldedKeys && a.alias === account?.alias
@@ -53,7 +52,8 @@ export function WorkerTest(): JSX.Element {
     await shieldedSyncWorker.sync({
       type: "sync",
       payload: {
-        vks: [vk],
+        vks: [{ key: vk, birthday: 0 }],
+        chainId: chain!.id,
       },
     });
 
@@ -86,17 +86,18 @@ export function WorkerTest(): JSX.Element {
       ],
     });
 
+    const publicKeyRevealed = await isPublicKeyRevealed(account!.address);
     const msg: Shield = {
       type: "shield",
       payload: {
+        publicKeyRevealed,
         account: account!,
         gasConfig: {
           gasLimit: BigNumber(50000),
           gasPrice: BigNumber(0),
           gasToken: "tnam1",
         },
-        shieldingProps: [shieldingMsgValue],
-        indexerUrl,
+        props: [shieldingMsgValue],
         chain: chain!,
       },
     };
@@ -108,7 +109,7 @@ export function WorkerTest(): JSX.Element {
     await shieldWorker.broadcast({
       type: "broadcast",
       payload: {
-        encodedTx,
+        encodedTxData: encodedTx,
         signedTxs,
       },
     });
@@ -143,10 +144,6 @@ export function WorkerTest(): JSX.Element {
       ],
     });
 
-    const vks = accounts
-      ?.filter((acc) => acc.type === "shielded-keys")
-      .map((a) => a.viewingKey!);
-
     const disposableSigner = (await refetch()).data;
 
     const msg: Unshield = {
@@ -161,10 +158,8 @@ export function WorkerTest(): JSX.Element {
           gasPrice: BigNumber(0),
           gasToken: "tnam1",
         },
-        unshieldingProps: [shieldingMsgValue],
+        props: [shieldingMsgValue],
         chain: chain!,
-        vks: vks!,
-        indexerUrl,
       },
     };
 
@@ -174,7 +169,7 @@ export function WorkerTest(): JSX.Element {
     await shieldWorker.broadcast({
       type: "broadcast",
       payload: {
-        encodedTx,
+        encodedTxData: encodedTx,
         signedTxs,
       },
     });
@@ -209,10 +204,6 @@ export function WorkerTest(): JSX.Element {
       ],
     });
 
-    const vks = accounts
-      ?.filter((acc) => acc.type === "shielded-keys")
-      .map((a) => a.viewingKey!);
-
     const disposableSigner = (await refetch()).data;
 
     const msg: ShieldedTransfer = {
@@ -227,9 +218,8 @@ export function WorkerTest(): JSX.Element {
           gasPrice: BigNumber(0),
           gasToken: "tnam1",
         },
-        shieldingProps: [shieldingMsgValue],
+        props: [shieldingMsgValue],
         chain: chain!,
-        vks: vks!,
       },
     };
 
@@ -239,7 +229,7 @@ export function WorkerTest(): JSX.Element {
     await shieldWorker.broadcast({
       type: "broadcast",
       payload: {
-        encodedTx,
+        encodedTxData: encodedTx,
         signedTxs,
       },
     });

@@ -183,6 +183,9 @@ export const shortenAddress = (
   suffixLength = 6,
   delimiter = "..."
 ): string => {
+  if (address.length <= prefixLength + suffixLength) {
+    return address;
+  }
   const prefix = address.substring(0, prefixLength);
   const suffix = address.substring(
     address.length - suffixLength,
@@ -284,9 +287,9 @@ export const formatPercentage = (
  * Applies a function to a value that is possibly undefined.
  */
 export const mapUndefined = <A, B>(
-  f: (a: A) => B,
-  a: A | undefined
-): B | undefined => (typeof a === "undefined" ? undefined : f(a));
+  transform: (value: A) => B,
+  input: A | undefined
+): B | undefined => (input !== undefined ? transform(input) : undefined);
 
 export const isEmptyObject = (object: Record<string, unknown>): boolean => {
   return Object.keys(object).length === 0;

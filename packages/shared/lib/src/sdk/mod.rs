@@ -15,7 +15,7 @@ use crate::utils::to_bytes;
 use crate::utils::to_js_result;
 use args::{generate_masp_build_params, masp_sign, BuildParams};
 use gloo_utils::format::JsValueSerdeExt;
-use namada_sdk::address::{Address, MASP};
+use namada_sdk::address::{Address, ImplicitAddress, MASP};
 use namada_sdk::args::{GenIbcShieldingTransfer, InputAmount, Query, TxExpiration};
 use namada_sdk::borsh::{self, BorshDeserialize};
 use namada_sdk::eth_bridge::bridge_pool::build_bridge_pool_tx;
@@ -23,7 +23,7 @@ use namada_sdk::hash::Hash;
 use namada_sdk::ibc::convert_masp_tx_to_ibc_memo;
 use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_sdk::io::NamadaIo;
-use namada_sdk::key::{common, ed25519, SigScheme};
+use namada_sdk::key::{common, ed25519, RefTo, SigScheme};
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::masp_primitives::transaction::components::sapling::fees::InputView;
 use namada_sdk::masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedKey};
@@ -33,6 +33,7 @@ use namada_sdk::string_encoding::Format;
 use namada_sdk::tendermint_rpc::Url;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::token::{MaspTxId, OptionExt};
+use namada_sdk::tx::data::TxType;
 use namada_sdk::tx::{
     build_batch, build_bond, build_claim_rewards, build_ibc_transfer, build_redelegation,
     build_reveal_pk, build_shielded_transfer, build_shielding_transfer, build_transparent_transfer,
@@ -99,6 +100,12 @@ impl Sdk {
         }
     }
 
+    pub async fn clear_shielded_context(chain_id: String) -> Result<(), JsValue> {
+        masp::JSShieldedUtils::clear(&chain_id).await?;
+
+        Ok(())
+    }
+
     pub async fn has_masp_params() -> Result<JsValue, JsValue> {
         let has = has_masp_params().await?;
 
@@ -111,7 +118,11 @@ impl Sdk {
     }
 
     #[cfg(feature = "web")]
-    pub async fn load_masp_params(&self, _db_name: JsValue) -> Result<(), JsValue> {
+    pub async fn load_masp_params(
+        &self,
+        _db_name: JsValue,
+        chain_id: String,
+    ) -> Result<(), JsValue> {
         // _dn_name is not used in the web version for a time being
         let params = get_masp_params().await?;
         let params_iter = js_sys::try_iter(&params)?.ok_or("Can't iterate over JsValue")?;
@@ -125,17 +136,23 @@ impl Sdk {
         assert_eq!(params_bytes.next(), None);
 
         let mut shielded = self.namada.shielded_mut().await;
-        *shielded = ShieldedContext::new(masp::JSShieldedUtils::new(spend, output, convert).await?);
+        *shielded = ShieldedContext::new(
+            masp::JSShieldedUtils::new(spend, output, convert, chain_id).await?,
+        );
 
         Ok(())
     }
 
     #[cfg(feature = "nodejs")]
-    pub async fn load_masp_params(&self, context_dir: JsValue) -> Result<(), JsValue> {
+    pub async fn load_masp_params(
+        &self,
+        context_dir: JsValue,
+        chain_id: &str,
+    ) -> Result<(), JsValue> {
         let context_dir = context_dir.as_string().unwrap();
 
         let mut shielded = self.namada.shielded_mut().await;
-        *shielded = ShieldedContext::new(masp::JSShieldedUtils::new(&context_dir).await);
+        *shielded = ShieldedContext::new(masp::JSShieldedUtils::new(&context_dir, chain_id).await);
 
         Ok(())
     }
@@ -227,11 +244,17 @@ impl Sdk {
     pub async fn sign_tx(
         &self,
         tx: Vec<u8>,
-        private_key: Option<String>,
+        private_keys: Vec<String>,
         chain_id: Option<String>,
     ) -> Result<JsValue, JsError> {
         let tx: tx::Tx = borsh::from_slice(&tx)?;
         let mut namada_tx: Tx = borsh::from_slice(&tx.tx_bytes())?;
+
+        let mut wrapper_signing_key = None;
+        let wrapper_fee_payer: Option<Address> = match namada_tx.header().tx_type {
+            TxType::Wrapper(wrapper) => Some(wrapper.fee_payer()),
+            _ => None,
+        };
 
         // If chain_id is provided, validate this against value in Tx header
         if let Some(c) = chain_id {
@@ -244,13 +267,25 @@ impl Sdk {
             }
         }
 
-        let signing_keys = match private_key.clone() {
-            Some(private_key) => vec![common::SecretKey::Ed25519(ed25519::SecretKey::from_str(
-                &private_key,
-            )?)],
-            // If no private key is provided, we assume masp source and return empty vec
-            None => vec![],
-        };
+        let mut signing_keys: Vec<common::SecretKey> = vec![];
+        for private_key in private_keys.into_iter() {
+            let signing_key =
+                common::SecretKey::Ed25519(ed25519::SecretKey::from_str(&private_key)?);
+            signing_keys.push(signing_key.clone());
+
+            if !wrapper_signing_key.is_some() {
+                // Check address against wrapper_fee_payer
+                let wrapper_fee_payer = wrapper_fee_payer.clone();
+                let public = common::PublicKey::from(signing_key.ref_to());
+                let implicit = Address::Implicit(ImplicitAddress::from(&public));
+
+                if wrapper_fee_payer.is_some() {
+                    if implicit == wrapper_fee_payer.unwrap() {
+                        wrapper_signing_key = Some(signing_key)
+                    }
+                }
+            }
+        }
 
         for signing_tx_data in tx.signing_tx_data()? {
             if let Some(account_public_keys_map) = signing_tx_data.account_public_keys_map.clone() {
@@ -266,12 +301,8 @@ impl Sdk {
             }
         }
 
-        // The key is either passed private key for transparent sources or the disposable signing
-        // key for shielded sources
-        let key = signing_keys[0].clone();
-
         // Sign the fee header
-        namada_tx.sign_wrapper(key);
+        namada_tx.sign_wrapper(wrapper_signing_key.expect("Wrapper signing key was not provided!"));
 
         to_js_result(borsh::to_vec(&namada_tx)?)
     }
@@ -519,6 +550,7 @@ impl Sdk {
         let bparams =
             generate_masp_build_params(MAX_HW_SPEND, MAX_HW_CONVERT, MAX_HW_OUTPUT, &args.tx)
                 .await?;
+        let _ = &self.namada.shielded_mut().await.load().await?;
 
         let (tx, signing_data, _) = match bparams {
             BuildParams::RngBuildParams(mut bparams) => {

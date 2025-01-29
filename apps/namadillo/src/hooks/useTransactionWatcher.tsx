@@ -1,18 +1,28 @@
+import { WrapperTransactionExitCodeEnum } from "@namada/indexer-client";
 import { useQuery } from "@tanstack/react-query";
-import { updateIbcTransactionStatus } from "atoms/integrations";
-import { myTransactionHistoryAtom } from "atoms/transactions/atoms";
-import { filterPendingTransactions } from "atoms/transactions/functions";
+import {
+  updateIbcTransferStatus,
+  updateIbcWithdrawalStatus,
+} from "atoms/integrations";
+import {
+  fetchTransactionAtom,
+  pendingTransactionsHistoryAtom,
+} from "atoms/transactions";
+import { differenceInHours } from "date-fns";
 import { useAtomValue } from "jotai";
-import { useMemo } from "react";
-import { IbcTransferTransactionData } from "types";
+import { IbcTransferTransactionData, TransferStep } from "types";
 import { useTransactionActions } from "./useTransactionActions";
+
+// After 2h the pending status will be changed to timeout
+const pendingTimeout = 2;
+
+const isError404 = (e: unknown): boolean =>
+  typeof e === "object" && e !== null && "status" in e && e.status === 404;
 
 export const useTransactionWatcher = (): void => {
   const { changeTransaction } = useTransactionActions();
-  const transactionHistory = useAtomValue(myTransactionHistoryAtom);
-  const pendingTransactions = useMemo(() => {
-    return transactionHistory.filter(filterPendingTransactions);
-  }, [transactionHistory]);
+  const pendingTransactions = useAtomValue(pendingTransactionsHistoryAtom);
+  const fetchTransaction = useAtomValue(fetchTransactionAtom);
 
   useQuery({
     queryKey: ["transaction-status", pendingTransactions],
@@ -20,14 +30,63 @@ export const useTransactionWatcher = (): void => {
     queryFn: async () => {
       return Promise.allSettled(
         pendingTransactions.map(async (tx) => {
-          await updateIbcTransactionStatus(
-            tx.rpc,
-            tx as IbcTransferTransactionData,
-            changeTransaction
-          );
+          switch (tx.type) {
+            case "TransparentToTransparent":
+            case "TransparentToShielded":
+            case "ShieldedToTransparent":
+            case "ShieldedToShielded":
+              {
+                const hash = tx.hash ?? "";
+                try {
+                  const response = await fetchTransaction(hash);
+                  const hasRejectedTx = response.innerTransactions.find(
+                    ({ exitCode }) =>
+                      exitCode === WrapperTransactionExitCodeEnum.Rejected
+                  );
+                  if (hasRejectedTx) {
+                    changeTransaction(hash, {
+                      status: "error",
+                      errorMessage: "Transaction rejected",
+                    });
+                  } else {
+                    changeTransaction(hash, {
+                      status: "success",
+                      currentStep: TransferStep.Complete,
+                    });
+                  }
+                } catch (e) {
+                  if (
+                    isError404(e) &&
+                    differenceInHours(Date.now(), tx.createdAt) > pendingTimeout
+                  ) {
+                    changeTransaction(hash, {
+                      status: "error",
+                      errorMessage: "Transaction timed out",
+                    });
+                  }
+                }
+              }
+              break;
+
+            case "IbcToTransparent":
+            case "IbcToShielded":
+              await updateIbcTransferStatus(
+                tx.rpc,
+                tx as IbcTransferTransactionData,
+                changeTransaction
+              );
+              break;
+
+            case "TransparentToIbc":
+              await updateIbcWithdrawalStatus(
+                tx as IbcTransferTransactionData,
+                changeTransaction
+              );
+              break;
+          }
         })
       );
     },
-    refetchInterval: 50000,
+    refetchInterval: 2000,
   });
 };

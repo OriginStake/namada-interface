@@ -1,12 +1,14 @@
 import { isUrlValid, sanitizeUrl } from "@namada/utils";
-import { indexerRpcUrlAtom } from "atoms/chain";
+import { getCustomIndexerApi, indexerApiAtom } from "atoms/api";
+import { chainParametersAtom, indexerRpcUrlAtom } from "atoms/chain";
 import { Getter, Setter, atom, getDefaultStore } from "jotai";
 import { atomWithMutation, atomWithQuery } from "jotai-tanstack-query";
 import { atomWithStorage } from "jotai/utils";
 import { SettingsStorage } from "types";
 import {
+  clearShieldedContext,
   fetchDefaultTomlConfig,
-  isIndexerAlive,
+  getIndexerHealth,
   isMaspIndexerAlive,
   isRpcAlive,
 } from "./services";
@@ -175,7 +177,11 @@ export const maspIndexerUrlAtom = atom((get) => {
 export const updateIndexerUrlAtom = atomWithMutation(() => {
   return {
     mutationKey: ["update-indexer-url"],
-    mutationFn: changeSettingsUrl("indexerUrl", isIndexerAlive),
+    mutationFn: changeSettingsUrl(
+      "indexerUrl",
+      async (url: string): Promise<boolean> =>
+        !!(await getIndexerHealth(getCustomIndexerApi(url)))
+    ),
   };
 });
 
@@ -193,6 +199,7 @@ export const signArbitraryEnabledAtom = atom(
 
 export const indexerHeartbeatAtom = atomWithQuery((get) => {
   const indexerUrl = get(indexerUrlAtom);
+  const api = get(indexerApiAtom);
   return {
     queryKey: ["indexer-heartbeat", indexerUrl],
     enabled: !!indexerUrl,
@@ -200,9 +207,22 @@ export const indexerHeartbeatAtom = atomWithQuery((get) => {
     refetchOnWindowFocus: true,
     refetchInterval: 10_000,
     queryFn: async () => {
-      const valid = await isIndexerAlive(indexerUrl);
-      if (!valid) throw "Unable to verify indexer heartbeat";
-      return true;
+      const indexerInfo = await getIndexerHealth(api);
+      if (!indexerInfo) throw "Unable to verify indexer heartbeat";
+      return indexerInfo;
+    },
+  };
+});
+
+export const clearShieldedContextAtom = atomWithMutation((get) => {
+  const parameters = get(chainParametersAtom);
+  return {
+    mutationKey: ["clear-shielded-context"],
+    mutationFn: () => {
+      if (!parameters.data) {
+        throw new Error("Chain parameters not loaded");
+      }
+      return clearShieldedContext(parameters.data.chainId);
     },
   };
 });

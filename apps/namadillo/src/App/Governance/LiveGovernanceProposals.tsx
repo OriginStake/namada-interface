@@ -1,17 +1,20 @@
 import { SegmentedBar, Stack } from "@namada/components";
-import { Proposal, VoteType, voteTypes } from "@namada/types";
+import { Proposal, UnknownVoteType, VoteType, voteTypes } from "@namada/types";
 import { routes } from "App/routes";
 import BigNumber from "bignumber.js";
 import clsx from "clsx";
 import { GoInfo } from "react-icons/go";
 import { generatePath, useNavigate } from "react-router-dom";
-import { secondsToDateTimeString } from "utils";
+import {
+  secondsToDateTimeString,
+  secondsToFullDateTimeString,
+} from "utils/dates";
 import { StatusLabel, TypeLabel, VotedLabel } from "./ProposalLabels";
 import { colors } from "./types";
 
 const ProposalListItem: React.FC<{
   proposal: Proposal;
-  vote?: VoteType;
+  vote?: VoteType | UnknownVoteType;
 }> = ({ proposal, vote }) => {
   const { status } = proposal;
 
@@ -47,7 +50,10 @@ const ProposalListItem: React.FC<{
     >
       <div className="flex items-center justify-between gap-4">
         <StatusLabel className="text-[10px] min-w-38" status={status} />
-        <div className="text-xs text-neutral-400">
+        <div
+          className="text-xs text-neutral-400"
+          title={secondsToFullDateTimeString(proposal.endTime)}
+        >
           Voting End on {secondsToDateTimeString(proposal.endTime)}&nbsp;&mdash;
           Epoch {proposal.endEpoch.toString()}
         </div>
@@ -78,7 +84,7 @@ const ProposalListItem: React.FC<{
 
 type LiveGovernanceProposalsProps = {
   proposals: Proposal[];
-  votedProposals: { proposalId: bigint; vote: VoteType }[];
+  votedProposals: { proposalId: bigint; vote: VoteType | UnknownVoteType }[];
 };
 
 export const LiveGovernanceProposals: React.FC<

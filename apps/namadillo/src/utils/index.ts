@@ -1,12 +1,10 @@
 import { Asset, AssetDenomUnit } from "@chain-registry/types";
+import namadaAssets from "@namada/chain-registry/namada/assetlist.json";
 import { ProposalStatus, ProposalTypeString } from "@namada/types";
 import { localnetConfigAtom } from "atoms/integrations/atoms";
 import BigNumber from "bignumber.js";
-import * as fns from "date-fns";
 import { getDefaultStore } from "jotai";
-import { DateTime } from "luxon";
-import namadaAssets from "namada-chain-registry/namada/assetlist.json";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export const proposalStatusToString = (status: ProposalStatus): string => {
   const statusText: Record<ProposalStatus, string> = {
@@ -40,82 +38,24 @@ export const proposalIdToString = (proposalId: bigint): string =>
 
 export const useTransactionEventListener = <T extends keyof WindowEventMap>(
   event: T,
-  handler: (this: Window, ev: WindowEventMap[T]) => void,
-  deps: React.DependencyList = []
+  handler: (event: WindowEventMap[T]) => void
 ): void => {
+  // `handlerRef` is useful to avoid recreating the listener every time
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
   useEffect(() => {
-    window.addEventListener(event, handler);
+    const callback: typeof handler = (event) => handlerRef.current(event);
+    window.addEventListener(event, callback);
     return () => {
-      window.removeEventListener(event, handler);
+      window.removeEventListener(event, callback);
     };
-  }, deps);
+  }, [event]);
 };
-
-export const useTransactionEventListListener = <T extends keyof WindowEventMap>(
-  events: T[],
-  handler: (this: Window, ev: WindowEventMap[T]) => void,
-  deps: React.DependencyList = []
-): void => {
-  useEffect(() => {
-    events.forEach((event) => {
-      window.addEventListener(event, handler);
-    });
-    return () => {
-      events.forEach((event) => {
-        window.removeEventListener(event, handler);
-      });
-    };
-  }, deps);
-};
-
-const secondsToDateTime = (seconds: bigint): DateTime =>
-  DateTime.fromSeconds(Number(seconds));
-
-export const secondsToTimeString = (seconds: bigint): string =>
-  secondsToDateTime(seconds).toLocaleString(DateTime.TIME_24_SIMPLE);
-
-export const secondsToDateString = (seconds: bigint): string =>
-  secondsToDateTime(seconds).toLocaleString(DateTime.DATE_MED);
-
-export const secondsToDateTimeString = (seconds: bigint): string =>
-  `${secondsToDateString(seconds)}, ${secondsToTimeString(seconds)}`;
 
 export const sumBigNumberArray = (numbers: BigNumber[]): BigNumber => {
   if (numbers.length === 0) return new BigNumber(0);
   return BigNumber.sum(...numbers);
-};
-
-export const secondsToTimeRemainingString = (
-  startTimeInSeconds: bigint,
-  endTimeInSeconds: bigint
-): string | undefined => {
-  return;
-  if (endTimeInSeconds < startTimeInSeconds) {
-    return undefined;
-  }
-
-  const toMilliNumber = (n: bigint): number =>
-    fns.secondsToMilliseconds(Number(n));
-  const interval = {
-    start: toMilliNumber(startTimeInSeconds),
-    end: toMilliNumber(endTimeInSeconds),
-  };
-  const format: fns.DurationUnit[] = ["days", "hours", "minutes"];
-  const timeLeft = fns.intervalToDuration(interval);
-  const formatted = fns.formatDuration(timeLeft, {
-    format,
-    zero: true,
-    delimiter: ": ",
-  });
-
-  if (formatted === "") {
-    return "< 1 Min";
-  }
-
-  return formatted
-    .replace("day", "Day")
-    .replace("hour", "Hr")
-    .replace("minute", "Min");
 };
 
 const findDisplayUnit = (asset: Asset): AssetDenomUnit | undefined => {
@@ -123,8 +63,7 @@ const findDisplayUnit = (asset: Asset): AssetDenomUnit | undefined => {
   return denom_units.find((unit) => unit.denom === display);
 };
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export const namadaAsset = () => {
+export const namadaAsset = (): Asset => {
   const store = getDefaultStore();
   const config = store.get(localnetConfigAtom);
 

@@ -1,7 +1,6 @@
 import * as Comlink from "comlink";
-import { EventEmitter } from "events";
 
-import { Balance, SdkEvents } from "@namada/sdk/web";
+import { Balance, ProgressBarNames, SdkEvents } from "@namada/sdk/web";
 import { getSdkInstance } from "utils/sdk";
 import {
   Events,
@@ -11,6 +10,9 @@ import {
   Worker as ShieldedSyncWorkerApi,
 } from "workers/ShieldedSyncWorker";
 import ShieldedSyncWorker from "workers/ShieldedSyncWorker?worker";
+// TODO: move to @namada/types?
+import { DefaultApi } from "@namada/indexer-client";
+import { DatedViewingKey } from "@namada/types";
 
 export type ShieldedSyncEventMap = {
   [SdkEvents.ProgressBarStarted]: ProgressBarStarted[];
@@ -18,76 +20,87 @@ export type ShieldedSyncEventMap = {
   [SdkEvents.ProgressBarFinished]: ProgressBarFinished[];
 };
 
-export type ShieldedSyncEmitter = EventEmitter<ShieldedSyncEventMap>;
+let runningShieldedSync: Promise<void> | undefined;
 
-let shieldedSyncEmitter: ShieldedSyncEmitter | undefined;
-
-export function shieldedSync(
-  rpcUrl: string,
-  maspIndexerUrl: string,
-  token: string,
-  viewingKeys: string[]
-): EventEmitter<ShieldedSyncEventMap> {
-  if (shieldedSyncEmitter) {
-    return shieldedSyncEmitter;
+export async function shieldedSync({
+  rpcUrl,
+  maspIndexerUrl,
+  token,
+  viewingKeys,
+  chainId,
+  onProgress,
+}: {
+  rpcUrl: string;
+  maspIndexerUrl: string;
+  token: string;
+  viewingKeys: DatedViewingKey[];
+  chainId: string;
+  onProgress?: (perc: number) => void;
+}): Promise<void> {
+  // If there is a sync running, wait until it is finished to run another.
+  // This is important because we could want to queue a new sync after
+  // a transaction is completed but there is already one sync in progress
+  if (runningShieldedSync) {
+    await runningShieldedSync;
   }
 
-  const worker = new ShieldedSyncWorker();
-  const shieldedSyncWorker = Comlink.wrap<ShieldedSyncWorkerApi>(worker);
-  shieldedSyncEmitter = new EventEmitter<ShieldedSyncEventMap>();
-
-  worker.onmessage = (event: MessageEvent<Events>) => {
-    if (!shieldedSyncEmitter) {
-      return;
-    }
-    if (event.data.type === SdkEvents.ProgressBarStarted) {
-      shieldedSyncEmitter.emit(event.data.type, event.data);
-    }
-    if (event.data.type === SdkEvents.ProgressBarIncremented) {
-      shieldedSyncEmitter.emit(event.data.type, event.data);
-    }
-    if (event.data.type === SdkEvents.ProgressBarFinished) {
-      shieldedSyncEmitter.emit(event.data.type, event.data);
-    }
-  };
-
-  (async () => {
+  const executeSync = async (): Promise<void> => {
+    const worker = new ShieldedSyncWorker();
+    worker.onmessage = ({ data }: MessageEvent<Events>) => {
+      if (!onProgress) {
+        return;
+      }
+      if (
+        data.type === SdkEvents.ProgressBarIncremented &&
+        data.name === ProgressBarNames.Fetched
+      ) {
+        if (onProgress) {
+          const { current, total } = data;
+          const perc =
+            total === 0 ? 0 : Math.max(0, Math.min(1, current / total));
+          onProgress(perc);
+        }
+      }
+      if (
+        data.type === SdkEvents.ProgressBarFinished &&
+        data.name === ProgressBarNames.Fetched
+      ) {
+        onProgress(1);
+      }
+    };
     try {
+      const shieldedSyncWorker = Comlink.wrap<ShieldedSyncWorkerApi>(worker);
       await shieldedSyncWorker.init({
         type: "init",
         payload: { rpcUrl, maspIndexerUrl, token },
       });
       await shieldedSyncWorker.sync({
         type: "sync",
-        payload: { vks: viewingKeys },
+        payload: { vks: viewingKeys, chainId },
       });
     } finally {
       worker.terminate();
-      shieldedSyncEmitter = undefined;
     }
-  })();
+  };
 
-  return shieldedSyncEmitter;
+  runningShieldedSync = executeSync();
+  return runningShieldedSync;
 }
 
 export const fetchShieldedBalance = async (
-  viewingKey: string,
-  addresses: string[]
+  viewingKey: DatedViewingKey,
+  addresses: string[],
+  chainId: string
 ): Promise<Balance> => {
-  // TODO mock shielded balance
-  // return await mockShieldedBalance(viewingKey);
-
   const sdk = await getSdkInstance();
-  return await sdk.rpc.queryBalance(viewingKey, addresses);
+  return await sdk.rpc.queryBalance(viewingKey.key, addresses, chainId);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const mockShieldedBalance = async (viewingKey: string): Promise<Balance> => {
-  await new Promise((r) => setTimeout(() => r(0), 500));
-  getSdkInstance().then((sdk) => sdk.rpc.shieldedSync([viewingKey]));
-  return [
-    ["tnam1qy440ynh9fwrx8aewjvvmu38zxqgukgc259fzp6h", "37"], // nam
-    ["tnam1p5nnjnasjtfwen2kzg78fumwfs0eycqpecuc2jwz", "1"], // uatom
-    ["tnam1p4rm6gy30xzeehj29qr8v0t33xmwdlsn5ye0ezf0", "2"], // uosmo
-  ];
+export const fetchBlockHeightByTimestamp = async (
+  api: DefaultApi,
+  timestamp: number
+): Promise<number> => {
+  const response = await api.apiV1BlockTimestampValueGet(timestamp);
+
+  return Number(response.data.height);
 };

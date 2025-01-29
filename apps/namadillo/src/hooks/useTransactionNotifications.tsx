@@ -10,7 +10,9 @@ import {
 } from "atoms/notifications";
 import { searchAllStoredTxByHash } from "atoms/transactions";
 import BigNumber from "bignumber.js";
+import invariant from "invariant";
 import { useSetAtom } from "jotai";
+import { EventData } from "types/events";
 import { useTransactionEventListener } from "utils";
 
 type TxWithAmount = { amount: BigNumber };
@@ -23,7 +25,7 @@ const getTotalAmountFromTransactionList = (txs: TxWithAmount[]): BigNumber =>
   }, new BigNumber(0));
 
 const parseTxsData = <T extends TxWithAmount>(
-  tx: TxProps,
+  tx: TxProps | TxProps[],
   data: T[]
 ): { id: string; total: BigNumber } => {
   const id = createNotificationId(tx);
@@ -344,18 +346,43 @@ export const useTransactionNotifications = (): void => {
     });
   });
 
-  const handleTransferNotification = (
-    tx: TxProps,
-    data: TxWithAmount[]
-  ): void => {
-    const { id } = parseTxsData(tx, data);
+  const onTransferError = (e: EventData<unknown>): void => {
+    const id = createNotificationId(e.detail.tx);
     clearPendingNotifications(id);
-    const storedTx = searchAllStoredTxByHash(tx.hash);
-    if (storedTx) {
-      dispatchNotification({
-        id,
-        title: "Transfer transaction succeeded",
-        description: (
+    const storedTx = searchAllStoredTxByHash(e.detail.tx[0].hash);
+    dispatchNotification({
+      id,
+      type: "error",
+      title: "Transfer transaction failed",
+      description:
+        storedTx ?
+          <>
+            Your transfer transaction of{" "}
+            <TokenCurrency
+              symbol={storedTx.asset.symbol}
+              amount={storedTx.displayAmount}
+            />{" "}
+            to {shortenAddress(storedTx.destinationAddress, 8, 8)} has failed
+          </>
+        : "Your transfer transaction has failed",
+      details:
+        e.detail.error?.message && failureDetails(e.detail.error.message),
+    });
+  };
+  useTransactionEventListener("TransparentTransfer.Error", onTransferError);
+  useTransactionEventListener("ShieldedTransfer.Error", onTransferError);
+  useTransactionEventListener("ShieldingTransfer.Error", onTransferError);
+  useTransactionEventListener("UnshieldingTransfer.Error", onTransferError);
+
+  const onTransferSuccess = (e: EventData<unknown>): void => {
+    const id = createNotificationId(e.detail.tx);
+    clearPendingNotifications(id);
+    const storedTx = searchAllStoredTxByHash(e.detail.tx[0].hash);
+    dispatchNotification({
+      id,
+      title: "Transfer transaction succeeded",
+      description:
+        storedTx ?
           <>
             Your transfer transaction of{" "}
             <TokenCurrency
@@ -364,25 +391,67 @@ export const useTransactionNotifications = (): void => {
             />{" "}
             to {shortenAddress(storedTx.destinationAddress, 8, 8)} has succeeded
           </>
-        ),
-        type: "success",
-      });
-    }
+        : "Your transfer transaction has succeeded",
+      type: "success",
+    });
   };
+  useTransactionEventListener("TransparentTransfer.Success", onTransferSuccess);
+  useTransactionEventListener("ShieldedTransfer.Success", onTransferSuccess);
+  useTransactionEventListener("ShieldingTransfer.Success", onTransferSuccess);
+  useTransactionEventListener("UnshieldingTransfer.Success", onTransferSuccess);
 
-  useTransactionEventListener("TransparentTransfer.Success", (e) => {
-    handleTransferNotification(e.detail.tx, e.detail.data[0].data);
+  useTransactionEventListener("IbcTransfer.Success", (e) => {
+    invariant(e.detail.hash, "Notification error: Invalid Tx hash");
+    const id = createNotificationId(e.detail.hash);
+    clearPendingNotifications(id);
+
+    const title =
+      e.detail.type === "TransparentToIbc" ?
+        "IBC withdraw transaction succeeded"
+      : "IBC transfer transaction succeeded";
+
+    dispatchNotification({
+      id,
+      title,
+      description: (
+        <>
+          Your transaction of{" "}
+          <TokenCurrency
+            amount={e.detail.displayAmount}
+            symbol={e.detail.asset.symbol}
+          />{" "}
+          has completed
+        </>
+      ),
+      type: "success",
+    });
   });
 
-  useTransactionEventListener("ShieldedTransfer.Success", (e) => {
-    handleTransferNotification(e.detail.tx, e.detail.data[0].data);
-  });
+  useTransactionEventListener("IbcTransfer.Error", (e) => {
+    invariant(e.detail.hash, "Notification error: Invalid Tx provider");
+    const id = createNotificationId(e.detail.hash);
+    clearPendingNotifications(id);
 
-  useTransactionEventListener("ShieldingTransfer.Success", (e) => {
-    handleTransferNotification(e.detail.tx, e.detail.data[0].data);
-  });
+    const title =
+      e.detail.type === "TransparentToIbc" ?
+        "IBC withdraw transaction failed"
+      : "IBC transfer transaction failed";
 
-  useTransactionEventListener("UnshieldingTransfer.Success", (e) => {
-    handleTransferNotification(e.detail.tx, e.detail.data[0].data);
+    dispatchNotification({
+      id,
+      title,
+      description: (
+        <>
+          Your transaction of{" "}
+          <TokenCurrency
+            amount={e.detail.displayAmount}
+            symbol={e.detail.asset.symbol}
+          />{" "}
+          has failed.
+        </>
+      ),
+      details: e.detail.errorMessage,
+      type: "error",
+    });
   });
 };

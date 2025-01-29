@@ -40,7 +40,6 @@ export type GasConfig = {
   gasLimit: GasLimit;
   gasPrice: GasPrice;
   gasToken: GasToken;
-  asset?: Asset;
 };
 
 export type TxGas = Record<Address, GasLimit>;
@@ -79,6 +78,11 @@ export type SettingsStorage = {
   maspIndexerUrl?: string;
   signArbitraryEnabled: boolean;
   enableTestnets?: boolean;
+};
+
+export type RpcStorage = {
+  address: string;
+  index: number;
 };
 
 export type Validator = Unique & {
@@ -223,28 +227,32 @@ export enum TransferStep {
   IbcWithdraw = "ibc-withdraw",
   IbcToShielded = "ibc-to-shielded",
   IbcToTransparent = "ibc-to-transparent",
+  WaitingConfirmation = "waiting-confirmation",
   Complete = "complete",
 }
 
 // Defines the steps in the Namada <> Namada transfer progress for tracking transaction stages.
 export const namadaTransferStages = {
   TransparentToShielded: [
-    TransferStep.Sign,
     TransferStep.ZkProof,
+    TransferStep.Sign,
     TransferStep.TransparentToShielded,
     TransferStep.Complete,
   ] as const,
   ShieldedToTransparent: [
+    TransferStep.ZkProof,
     TransferStep.Sign,
     TransferStep.ShieldedToTransparent,
     TransferStep.Complete,
   ] as const,
   ShieldedToShielded: [
+    TransferStep.ZkProof,
     TransferStep.Sign,
     TransferStep.ShieldedToShielded,
     TransferStep.Complete,
   ] as const,
   TransparentToTransparent: [
+    TransferStep.ZkProof,
     TransferStep.Sign,
     TransferStep.TransparentToTransparent,
     TransferStep.Complete,
@@ -256,17 +264,20 @@ export const ibcTransferStages = {
   TransparentToIbc: [
     TransferStep.Sign,
     TransferStep.IbcWithdraw,
+    TransferStep.WaitingConfirmation,
     TransferStep.Complete,
   ] as const,
   IbcToShielded: [
     TransferStep.Sign,
     TransferStep.ZkProof,
     TransferStep.IbcToShielded,
+    TransferStep.WaitingConfirmation,
     TransferStep.Complete,
   ] as const,
   IbcToTransparent: [
     TransferStep.Sign,
     TransferStep.IbcToTransparent,
+    TransferStep.WaitingConfirmation,
     TransferStep.Complete,
   ] as const,
 };

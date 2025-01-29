@@ -1,6 +1,7 @@
 import { Panel } from "@namada/components";
 import { ConnectPanel } from "App/Common/ConnectPanel";
 import { PageWithSidebar } from "App/Common/PageWithSidebar";
+import { ShieldedSyncProgress } from "App/Masp/ShieldedSyncProgress";
 import { EpochInformation } from "App/Sidebars/EpochInformation";
 import MainnetRoadmap from "App/Sidebars/MainnetRoadmap";
 import { ShieldAllBanner } from "App/Sidebars/ShieldAllBanner";
@@ -32,7 +33,7 @@ export const AccountOverview = (): JSX.Element => {
       <div className={twMerge("flex w-full")}>
         <section className="flex flex-col w-full rounded-sm min-h-full gap-2">
           <div className="grid sm:grid-cols-[0.8fr_1.25fr_0.66fr] gap-2">
-            <Panel className="flex items-center justify-center">
+            <Panel>
               <BalanceOverviewChart />
             </Panel>
             <Panel>
@@ -55,6 +56,7 @@ export const AccountOverview = (): JSX.Element => {
       </div>
       <aside className="flex flex-col gap-2">
         <EpochInformation />
+        <ShieldedSyncProgress />
         <ShieldAllBanner />
         <MainnetRoadmap />
       </aside>
