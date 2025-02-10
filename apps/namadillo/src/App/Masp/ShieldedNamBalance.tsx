@@ -1,7 +1,11 @@
 import { SkeletonLoading, Stack, Tooltip } from "@namada/components";
 import { AtomErrorBoundary } from "App/Common/AtomErrorBoundary";
 import { NamCurrency } from "App/Common/NamCurrency";
-import { shieldedTokensAtom } from "atoms/balance/atoms";
+import {
+  cachedShieldedRewardsAtom,
+  shieldedBalanceAtom,
+  shieldedTokensAtom,
+} from "atoms/balance/atoms";
 import { getTotalNam } from "atoms/balance/functions";
 import { applicationFeaturesAtom } from "atoms/settings/atoms";
 import BigNumber from "bignumber.js";
@@ -13,9 +17,11 @@ import namadaShieldedSvg from "./assets/namada-shielded.svg";
 
 const AsyncNamCurrency = ({
   amount,
+  syncing,
   className = "",
 }: {
   amount?: BigNumber;
+  syncing?: boolean;
   className?: string;
 }): JSX.Element => {
   if (amount === undefined) {
@@ -29,16 +35,22 @@ const AsyncNamCurrency = ({
 
   return (
     <NamCurrency
-      amount={new BigNumber(amount)}
-      className={twMerge("block text-center text-3xl leading-none", className)}
+      amount={amount}
+      className={twMerge(
+        "block text-center text-3xl leading-none",
+        syncing && "animate-pulse",
+        className
+      )}
       currencySymbolClassName="block text-xs mt-1"
     />
   );
 };
 
 export const ShieldedNamBalance = (): JSX.Element => {
+  const { isFetching: isShieldSyncing } = useAtomValue(shieldedBalanceAtom);
   const shieldedTokensQuery = useAtomValue(shieldedTokensAtom);
   const { shieldingRewardsEnabled } = useAtomValue(applicationFeaturesAtom);
+  const shieldedRewards = useAtomValue(cachedShieldedRewardsAtom);
 
   const shieldedNam =
     shieldedTokensQuery.isPending ? undefined : (
@@ -71,7 +83,7 @@ export const ShieldedNamBalance = (): JSX.Element => {
               />
             </div>
           </div>
-          <AsyncNamCurrency amount={shieldedNam} />
+          <AsyncNamCurrency amount={shieldedNam} syncing={isShieldSyncing} />
           <div
             className={twMerge(
               "py-2 max-w-[160px] mx-auto mt-4 mb-3",
@@ -109,8 +121,7 @@ export const ShieldedNamBalance = (): JSX.Element => {
             rewards per Epoch
           </div>
           {shieldingRewardsEnabled ?
-            // TODO shielding rewards
-            <AsyncNamCurrency amount={new BigNumber(0)} />
+            <AsyncNamCurrency amount={shieldedRewards.amount} />
           : <div className="block text-center text-3xl">--</div>}
           <div
             className={twMerge(

@@ -11,6 +11,8 @@ import { buildTx, EncodedTxData } from "lib/query";
 import {
   Broadcast,
   BroadcastDone,
+  GenerateIbcShieldingMemo,
+  GenerateIbcShieldingMemoDone,
   Init,
   InitDone,
   Shield,
@@ -61,6 +63,18 @@ export class Worker {
     };
   }
 
+  async generateIbcShieldingMemo(
+    m: GenerateIbcShieldingMemo
+  ): Promise<GenerateIbcShieldingMemoDone> {
+    if (!this.sdk) {
+      throw new Error("SDK is not initialized");
+    }
+    return {
+      type: "generate-ibc-shielding-memo-done",
+      payload: await generateIbcShieldingMemo(this.sdk, m.payload),
+    };
+  }
+
   async broadcast(m: Broadcast): Promise<BroadcastDone> {
     if (!this.sdk) {
       throw new Error("SDK is not initialized");
@@ -93,8 +107,8 @@ async function shield(
     chain,
     shieldingProps,
     sdk.tx.buildShieldingTransfer,
-    Boolean(publicKeyRevealed),
-    memo
+    memo,
+    !publicKeyRevealed
   );
 
   return encodedTxData;
@@ -105,9 +119,7 @@ async function unshield(
   payload: Unshield["payload"]
 ): Promise<EncodedTxData<UnshieldingTransferMsgValue>> {
   const { account, gasConfig, chain, props } = payload;
-
   await sdk.masp.loadMaspParams("", chain.chainId);
-
   const encodedTxData = await buildTx<UnshieldingTransferMsgValue>(
     sdk,
     account,
@@ -115,7 +127,8 @@ async function unshield(
     chain,
     props,
     sdk.tx.buildUnshieldingTransfer,
-    true
+    undefined,
+    false
   );
 
   return encodedTxData;
@@ -126,9 +139,7 @@ async function shieldedTransfer(
   payload: ShieldedTransfer["payload"]
 ): Promise<EncodedTxData<ShieldedTransferMsgValue>> {
   const { account, gasConfig, chain, props } = payload;
-
   await sdk.masp.loadMaspParams("", chain.chainId);
-
   const encodedTxData = await buildTx<ShieldedTransferMsgValue>(
     sdk,
     account,
@@ -136,10 +147,28 @@ async function shieldedTransfer(
     chain,
     props,
     sdk.tx.buildShieldedTransfer,
-    true
+    undefined,
+    false
   );
 
   return encodedTxData;
+}
+
+async function generateIbcShieldingMemo(
+  sdk: Sdk,
+  payload: GenerateIbcShieldingMemo["payload"]
+): Promise<string> {
+  const { target, token, amount, destinationChannelId, chainId } = payload;
+  await sdk.masp.loadMaspParams("", chainId);
+
+  const memo = await sdk.tx.generateIbcShieldingMemo(
+    target,
+    token,
+    amount,
+    destinationChannelId
+  );
+
+  return memo;
 }
 
 // TODO: We will probably move this to the separate worker
@@ -178,6 +207,9 @@ export const registerTransferHandlers = (): void => {
   registerBNTransferHandler<ShieldedTransfer>("shielded-transfer");
   registerBNTransferHandler<UnshieldDone>("unshield-done");
   registerBNTransferHandler<Unshield>("unshield");
+  registerBNTransferHandler<GenerateIbcShieldingMemo>(
+    "generate-ibc-shielding-memo"
+  );
   registerBNTransferHandler<Broadcast>("broadcast");
 };
 

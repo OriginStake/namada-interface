@@ -21,6 +21,7 @@ import { atom, getDefaultStore } from "jotai";
 import { atomWithQuery } from "jotai-tanstack-query";
 import { atomWithStorage } from "jotai/utils";
 import { Address, AddressWithAsset } from "types";
+import { namadaAsset, toDisplayAmount } from "utils";
 import {
   mapNamadaAddressesToAssets,
   mapNamadaAssetsToTokenBalances,
@@ -28,6 +29,7 @@ import {
 import {
   fetchBlockHeightByTimestamp,
   fetchShieldedBalance,
+  fetchShieldRewards,
   shieldedSync,
 } from "./services";
 
@@ -105,7 +107,7 @@ export const viewingKeysAtom = atomWithQuery<
 });
 
 export const storageShieldedBalanceAtom = atomWithStorage<
-  Record<Address, { address: string; minDenomAmount: BigNumber }[]>
+  Record<Address, { address: Address; minDenomAmount: string }[]>
 >("namadillo:shieldedBalance", {});
 
 export const shieldedSyncProgress = atom(0);
@@ -166,7 +168,7 @@ export const shieldedBalanceAtom = atomWithQuery((get) => {
 
       const shieldedBalance = response.map(([address, amount]) => ({
         address,
-        minDenomAmount: BigNumber(amount),
+        minDenomAmount: amount,
       }));
 
       const storage = get(storageShieldedBalanceAtom);
@@ -206,7 +208,10 @@ export const namadaShieldedAssetsAtom = atomWithQuery((get) => {
     ...queryDependentFn(
       async () =>
         await mapNamadaAddressesToAssets(
-          shieldedBalance ?? [],
+          shieldedBalance?.map((i) => ({
+            ...i,
+            minDenomAmount: BigNumber(i.minDenomAmount),
+          })) ?? [],
           chainTokensQuery.data!,
           chainParameters.data!.chainId
         ),
@@ -280,5 +285,55 @@ export const transparentTokensAtom = atomWithQuery<TokenBalance[]>((get) => {
         ),
       [transparentAssets, tokenPrices]
     ),
+  };
+});
+
+export const storageShieldedRewardsAtom = atomWithStorage<
+  Record<Address, { minDenomAmount: string }>
+>("namadillo:shieldedRewards", {});
+
+export const shieldRewardsAtom = atomWithQuery((get) => {
+  const viewingKeysQuery = get(viewingKeysAtom);
+  const chainParametersQuery = get(chainParametersAtom);
+  const { set } = getDefaultStore();
+
+  return {
+    queryKey: ["shield-rewards", viewingKeysQuery.data],
+    ...queryDependentFn(async () => {
+      const [viewingKey] = viewingKeysQuery.data!;
+      const { chainId } = chainParametersQuery.data!;
+      const minDenomAmount = BigNumber(
+        await fetchShieldRewards(viewingKey, chainId)
+      );
+
+      const storage = get(storageShieldedRewardsAtom);
+      set(storageShieldedRewardsAtom, {
+        ...storage,
+        [viewingKey.key]: { minDenomAmount: minDenomAmount.toString() },
+      });
+
+      return { minDenomAmount };
+    }, [viewingKeysQuery, chainParametersQuery]),
+  };
+});
+
+export const cachedShieldedRewardsAtom = atom((get) => {
+  const viewingKeysQuery = get(viewingKeysAtom);
+  const storage = get(storageShieldedRewardsAtom);
+
+  if (!viewingKeysQuery.data || !storage) {
+    return { amount: BigNumber(0) };
+  }
+  const [viewingKey] = viewingKeysQuery.data;
+
+  const rewards = get(shieldRewardsAtom);
+  const data = rewards.isSuccess ? rewards.data : storage[viewingKey.key];
+
+  if (!data) {
+    return { amount: BigNumber(0) };
+  }
+
+  return {
+    amount: toDisplayAmount(namadaAsset(), BigNumber(data.minDenomAmount)),
   };
 });
