@@ -40,7 +40,7 @@ export type AddressBalance = Record<Address, BigNumber>;
 
 export type GasConfig = {
   gasLimit: GasLimit;
-  gasPrice: GasPrice;
+  gasPriceInMinDenom: GasPrice;
   gasToken: GasToken;
 };
 
@@ -317,6 +317,10 @@ export const ibcTransferTypes: Array<keyof AllTransferStages> = [
   "IbcToShielded",
 ] as const;
 
+export const allTransferTypes = [
+  ...ibcTransferTypes.concat(transparentTransferTypes),
+] as const;
+
 type NamadaTransferStages = typeof namadaTransferStages;
 type IbcTransferStages = typeof ibcTransferStages;
 export type AllTransferStages = typeof allTransferStages;
@@ -357,6 +361,7 @@ export type BaseTransferTransaction = TransferStage & {
   errorMessage?: string;
   memo?: string;
   status: MutationStatus;
+  shielded?: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
