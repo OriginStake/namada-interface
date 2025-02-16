@@ -80,8 +80,8 @@ export const namadaAsset = (): Asset => {
   return asset satisfies Asset;
 };
 
-export const isNamadaAsset = (asset: Asset): boolean =>
-  asset.symbol === namadaAsset().symbol;
+export const isNamadaAsset = (asset?: Asset): boolean =>
+  asset?.symbol === namadaAsset().symbol;
 
 export const toDisplayAmount = (
   asset: Asset,
@@ -91,6 +91,7 @@ export const toDisplayAmount = (
   if (!displayUnit) {
     return baseAmount;
   }
+
   return baseAmount.shiftedBy(-displayUnit.exponent);
 };
 
