@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.10.2](https://github.com/anoma/namada-interface/compare/namadillo@v1.10.1...namadillo@v1.10.2) (2025-02-20)
+
+
+### Bug Fixes
+
+* Bumping namada keychain version (0.4.0) and fixing required indexer version (2.0.x) ([#1688](https://github.com/anoma/namada-interface/issues/1688)) ([6efe66e](https://github.com/anoma/namada-interface/commit/6efe66e81a10675abb44758f8f4cdc2d9c956d8b))
+
+## [1.10.1](https://github.com/anoma/namada-interface/compare/namadillo@v1.10.0...namadillo@v1.10.1) (2025-02-20)
+
+
+### Bug Fixes
+
+* Bumping indexer version to 2.0.0 ([#1682](https://github.com/anoma/namada-interface/issues/1682)) ([ad31626](https://github.com/anoma/namada-interface/commit/ad31626d2476c7f22d2ffc0490803a11a6195136))
+
 ## [1.10.0](https://github.com/anoma/namada-interface/compare/namadillo@v1.9.0...namadillo@v1.10.0) (2025-02-19)
 
 
