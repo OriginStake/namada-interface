@@ -15,7 +15,8 @@ import { SelectedWallet } from "./SelectedWallet";
 import { TokenAmountCard } from "./TokenAmountCard";
 
 type TransferDestinationProps = {
-  isShielded?: boolean;
+  isShieldedAddress?: boolean;
+  isShieldedTx?: boolean;
   onChangeShielded?: (isShielded: boolean) => void;
   chain?: Chain;
   wallet?: WalletProvider;
@@ -43,7 +44,8 @@ export const TransferDestination = ({
   chain,
   wallet,
   walletAddress,
-  isShielded,
+  isShieldedAddress,
+  isShieldedTx = false,
   isIbcTransfer,
   onChangeShielded,
   gasDisplayAmount,
@@ -65,9 +67,10 @@ export const TransferDestination = ({
   return (
     <div
       className={clsx("relative bg-neutral-800 rounded-lg px-4 pt-8 pb-4", {
-        "border border-yellow transition-colors duration-200": isShielded,
+        "border border-yellow transition-colors duration-200":
+          isShieldedAddress,
         "border border-white transition-colors duration-200":
-          chain?.chain_name === "namada" && !isShielded,
+          chain?.chain_name === "namada" && !isShieldedAddress,
       })}
     >
       {!isSubmitting && (
@@ -75,7 +78,7 @@ export const TransferDestination = ({
           {onChangeShielded && chain?.chain_name === "namada" && (
             <nav className="mb-6">
               <TabSelector
-                active={isShielded ? "shielded" : "transparent"}
+                active={isShieldedAddress ? "shielded" : "transparent"}
                 items={[
                   {
                     id: "shielded",
@@ -88,7 +91,7 @@ export const TransferDestination = ({
                     className: "text-white",
                   },
                 ]}
-                onChange={() => onChangeShielded(!isShielded)}
+                onChange={() => onChangeShielded(!isShieldedAddress)}
               />
             </nav>
           )}
@@ -161,7 +164,10 @@ export const TransferDestination = ({
           <div className="flex justify-between items-center">
             <SelectedChain chain={chain} wallet={wallet} iconSize="36px" />
             {wallet && walletAddress && (
-              <SelectedWallet wallet={wallet} address={walletAddress} />
+              <SelectedWallet
+                wallet={wallet}
+                address={customAddressActive ? address : walletAddress}
+              />
             )}
           </div>
         </footer>
@@ -174,7 +180,13 @@ export const TransferDestination = ({
               <img src={ibcTransferImageWhite} className="w-20" />
             : <div />}
             {changeFeeEnabled ?
-              feeProps && <TransactionFeeButton feeProps={feeProps} />
+              feeProps && (
+                <TransactionFeeButton
+                  feeProps={feeProps}
+                  className={isIbcTransfer ? "flex-none" : undefined}
+                  isShieldedTransfer={isShieldedTx}
+                />
+              )
             : gasDisplayAmount &&
               gasAsset && (
                 <TransactionFee
