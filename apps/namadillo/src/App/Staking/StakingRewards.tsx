@@ -70,7 +70,7 @@ export const StakingRewards = (): JSX.Element => {
   } = useTransaction({
     createTxAtom: claimAndStakeRewardsAtom,
     params: rewardsToClaim,
-    eventType: ["ClaimRewards", "Bond"],
+    eventType: "ClaimRewards",
     parsePendingTxNotification: () => ({
       title: "Claim rewards transaction is in progress",
       description: (

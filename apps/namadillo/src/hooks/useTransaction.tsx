@@ -15,7 +15,7 @@ import {
   TransactionPair,
 } from "lib/query";
 import { BuildTxAtomParams, ToastNotification } from "types";
-import { TransactionEventTypes } from "types/events";
+import { TransactionEventsClasses } from "types/events";
 import { TransactionFeeProps, useTransactionFee } from "./useTransactionFee";
 
 type AtomType<T> = Atom<
@@ -43,7 +43,7 @@ export type UseTransactionProps<T> = {
   params: T[];
   createTxAtom: AtomType<T>;
   useDisposableSigner?: boolean;
-  eventType: TransactionEventTypes;
+  eventType: TransactionEventsClasses;
   parsePendingTxNotification?: (tx: TransactionPair<T>) => PartialNotification;
   parseErrorTxNotification?: () => PartialNotification;
 } & UseTransactionPropsEvents<T>;
@@ -80,17 +80,12 @@ export const useTransaction = <T,>({
   const dispatchNotification = useSetAtom(dispatchToastNotificationAtom);
   const { mutateAsync: performBuildTx } = useAtomValue(createTxAtom);
 
-  // Claim & Stake is the only array of tx kinds. The rest are single tx kinds.
-  const kinds =
-    Array.isArray(eventType) ?
-      [...eventType]
-    : new Array(Math.max(1, params.length)).fill(eventType); // Don't display zeroed value when params are not set yet.
+  // We don't want to display zeroed value when params are not set yet.
+  const txKinds = new Array(Math.max(1, params.length)).fill(eventType);
   const feeProps = useTransactionFee(
-    kinds,
-    kinds.some((k) => ["ShieldedTransfer", "UnshieldingTransfer"].includes(k))
+    txKinds,
+    ["ShieldedTransfer", "UnshieldingTransfer"].includes(eventType)
   );
-  const broadcastEventType =
-    !Array.isArray(eventType) ? eventType : "ClaimRewards";
 
   const dispatchPendingTxNotification = (
     tx: TransactionPair<T>,
@@ -197,9 +192,8 @@ export const useTransaction = <T,>({
             transactionPair.encodedTxData,
             transactionPair.signedTxs,
             transactionPair.encodedTxData.meta?.props,
-            broadcastEventType
+            eventType
           );
-
           onBroadcasted?.(transactionPair);
         } catch (error) {
           if (parseErrorTxNotification) {
