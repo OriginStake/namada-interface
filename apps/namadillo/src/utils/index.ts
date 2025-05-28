@@ -83,7 +83,10 @@ export const namadaAsset = (): Asset => {
   const config = store.get(localnetConfigAtom);
 
   const configTokenAddress = config.data?.tokenAddress;
-  const registryAsset = namadaAssets.assets[0];
+
+  // TODO we should get this dynamically from the Github like how we do for chains
+  const assets = namadaAssets.assets as Asset[];
+  const registryAsset = assets[0];
   const asset =
     configTokenAddress ?
       {
@@ -92,7 +95,7 @@ export const namadaAsset = (): Asset => {
       }
     : registryAsset;
 
-  return asset satisfies Asset;
+  return asset;
 };
 
 export const isNamadaAsset = (asset?: Asset): boolean =>
@@ -121,6 +124,10 @@ export const toBaseAmount = (
   return displayAmount.shiftedBy(displayUnit.exponent);
 };
 
+export const toGasMsg = (gasLimit: BigNumber): string => {
+  return `Please raise the Gas Amount above the previously provided ${gasLimit} in the fee options for your transaction.`;
+};
+
 /**
  * Returns formatted error message based on tx props and error code
  */
@@ -129,16 +136,30 @@ export const toErrorDetail = (
   error: BroadcastTxError
 ): string => {
   try {
-    const { code } = error.toProps();
+    const { code, info } = error.toProps();
+    const { args } = tx[0];
     // TODO: Over time we may expand this to format errors for more result codes
     switch (code) {
       case ResultCode.TxGasLimit:
-        const { gasLimit } = tx[0].args;
-        return `${error.toString()} Please raise the Gas Amount above the previously provided ${gasLimit} in the fee options for your transaction.`;
+        return `${error.toString()}.\n${toGasMsg(args.gasLimit)}`;
+      case ResultCode.WasmRuntimeError:
+        // We can only check error type by reading the error message
+        return `${error.toString()}.\n${textToErrorDetail(info, tx[0])}`;
+
       default:
-        return error.toString();
+        return error.toString() + ` ${info}`;
     }
   } catch (_e) {
     return `${error.toString()}`;
+  }
+};
+
+export const textToErrorDetail = (text: string, tx: TxMsgValue): string => {
+  const { args } = tx;
+
+  if (text.includes("Gas error:")) {
+    return toGasMsg(args.gasLimit);
+  } else {
+    return text;
   }
 };

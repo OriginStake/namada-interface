@@ -85,10 +85,14 @@ export const NamadaTransfer: React.FC = () => {
     token: selectedAsset?.originalAddress ?? "",
     displayAmount: displayAmount ?? new BigNumber(0),
     onBeforeBuildTx: () => {
-      setCurrentStatus("Generating MASP Parameters...");
-      setCurrentStatusExplanation(
-        "Generating MASP parameters can take a few seconds. Please wait..."
-      );
+      if (isSourceShielded) {
+        setCurrentStatus("Generating MASP Parameters...");
+        setCurrentStatusExplanation(
+          "Generating MASP parameters can take a few seconds. Please wait..."
+        );
+      } else {
+        setCurrentStatus("Preparing transaction...");
+      }
     },
     onBeforeSign: () => {
       setCurrentStatus("Waiting for signature...");
@@ -161,7 +165,7 @@ export const NamadaTransfer: React.FC = () => {
   setLedgerStatusStop(isPerformingTransfer);
 
   return (
-    <Panel className="min-h-[600px] rounded-sm flex flex-col flex-1 py-20">
+    <Panel className="min-h-[600px] rounded-sm flex flex-col flex-1 pt-5 pb-20">
       <header className="flex flex-col items-center text-center mb-3 gap-6">
         <h1
           className={twMerge("mt-6 text-xl", isSourceShielded && "text-yellow")}
