@@ -68,6 +68,7 @@ export type SettingsTomlOptions = {
   masp_indexer_url?: string;
   rpc_url?: string;
   localnet_enabled?: boolean;
+  fathom_site_id?: string;
 };
 
 export type ChainParameters = {
@@ -345,6 +346,7 @@ export type BaseTransferTransaction = TransferStage & {
   chainId: string;
   sourceAddress: string;
   destinationAddress: string;
+  destinationChainId?: string;
   feePaid?: BigNumber;
   tipPaid?: BigNumber;
   resultTxHash?: string;
@@ -354,6 +356,7 @@ export type BaseTransferTransaction = TransferStage & {
   shielded?: boolean;
   createdAt: Date;
   updatedAt: Date;
+  timestamp?: number;
 };
 
 export type IbcTransferTransactionData = BaseTransferTransaction & {
