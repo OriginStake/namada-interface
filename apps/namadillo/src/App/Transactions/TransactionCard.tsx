@@ -19,7 +19,7 @@ import {
   IoCloseCircleOutline,
 } from "react-icons/io5";
 import { twMerge } from "tailwind-merge";
-import { toDisplayAmount } from "utils";
+import { isNamadaAsset, toDisplayAmount } from "utils";
 import keplrSvg from "../../integrations/assets/keplr.svg";
 
 type Tx = TransactionHistoryType;
@@ -39,7 +39,7 @@ export function getToken(
   txn: Tx["tx"],
   nativeToken: string
 ): string | undefined {
-  if (txn?.kind === "bond") return nativeToken;
+  if (txn?.kind === "bond" || txn?.kind === "unbond") return nativeToken;
   let parsed;
   try {
     parsed = txn?.data ? JSON.parse(txn.data) : undefined;
@@ -62,7 +62,7 @@ export function getToken(
   return undefined;
 }
 
-const getBondTransactionInfo = (
+const getBondOrUnbondTransactionInfo = (
   tx: Tx["tx"]
 ): { amount: BigNumber; sender?: string; receiver?: string } | undefined => {
   if (!tx?.data) return undefined;
@@ -86,25 +86,25 @@ const getTransactionInfo = (
 
   const parsed = typeof tx.data === "string" ? JSON.parse(tx.data) : tx.data;
   const sections: RawDataSection[] = Array.isArray(parsed) ? parsed : [parsed];
+  const target = sections.find((s) => s.targets?.length);
+  const source = sections.find((s) => s.sources?.length);
 
-  let receiver: string | undefined;
   let amount: BigNumber | undefined;
+  let receiver: string | undefined;
 
-  // Find first section with targets or sources that has amount
-  const targetSection = sections.find((sec) => sec.targets?.[0]?.amount);
-  const sourceSection = sections.find((sec) => sec.sources?.[0]?.amount);
-
-  if (targetSection?.targets?.[0]) {
-    amount = new BigNumber(targetSection.targets[0].amount);
-    receiver = targetSection.targets[0].owner;
+  if (target?.targets) {
+    const mainTarget = target.targets.reduce((max, cur) =>
+      new BigNumber(cur.amount).isGreaterThan(max.amount) ? cur : max
+    );
+    amount = new BigNumber(mainTarget.amount);
+    receiver = mainTarget.owner;
+  }
+  // fall back to sources only when we had no targets
+  if (!amount && source?.sources?.[0]) {
+    amount = new BigNumber(source.sources[0].amount);
   }
 
-  if (!amount && sourceSection?.sources?.[0]) {
-    amount = new BigNumber(sourceSection.sources[0].amount);
-  }
-
-  // Find sender from any section with sources
-  const sender = sections.find((sec) => sec.sources?.[0]?.owner)?.sources?.[0]
+  const sender = sections.find((s) => s.sources?.[0]?.owner)?.sources?.[0]
     ?.owner;
 
   return amount ? { amount, sender, receiver } : undefined;
@@ -118,15 +118,13 @@ export const TransactionCard = ({
   const token = getToken(transaction, nativeToken ?? "");
   const chainAssetsMap = useAtomValue(chainAssetsMapAtom);
   const asset = token ? chainAssetsMap[token] : undefined;
-  const isBondingTransaction = transactionTopLevel?.tx?.kind === "bond";
+  const isBondingOrUnbondingTransaction = ["bond", "unbond"].includes(
+    transactionTopLevel?.tx?.kind ?? ""
+  );
   const txnInfo =
-    isBondingTransaction ?
-      getBondTransactionInfo(transaction)
+    isBondingOrUnbondingTransaction ?
+      getBondOrUnbondTransactionInfo(transaction)
     : getTransactionInfo(transaction);
-  const baseAmount =
-    asset && txnInfo?.amount ?
-      toDisplayAmount(asset, txnInfo.amount)
-    : undefined;
   const receiver = txnInfo?.receiver;
   const sender = txnInfo?.sender;
   const isReceived = transactionTopLevel?.kind === "received";
@@ -135,6 +133,15 @@ export const TransactionCard = ({
   const transactionFailed = transaction?.exitCode === "rejected";
   const validators = useAtomValue(allValidatorsAtom);
   const validator = validators?.data?.find((v) => v.address === receiver);
+
+  const getBaseAmount = (): BigNumber | undefined => {
+    if (asset && txnInfo?.amount) {
+      if (isBondingOrUnbondingTransaction)
+        return toDisplayAmount(asset, txnInfo.amount);
+      if (isNamadaAsset(asset)) return txnInfo.amount;
+      return toDisplayAmount(asset, txnInfo.amount);
+    } else return undefined;
+  };
 
   const renderKeplrIcon = (address: string): JSX.Element | null => {
     if (isShieldedAddress(address)) return null;
@@ -150,6 +157,7 @@ export const TransactionCard = ({
     if (isReceived) return "Receive";
     if (kind.startsWith("ibc")) return "IBC Transfer";
     if (kind === "bond") return "Stake";
+    if (kind === "unbond") return "Unstake";
     if (kind === "claimRewards") return "Claim Rewards";
     if (kind === "transparentTransfer") return "Transparent Transfer";
     if (kind === "shieldingTransfer") return "Shielding Transfer";
@@ -158,6 +166,8 @@ export const TransactionCard = ({
     return "Transfer";
   };
 
+  const baseAmount = getBaseAmount();
+
   return (
     <article
       className={twMerge(
@@ -165,7 +175,9 @@ export const TransactionCard = ({
           "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 items-center my-1 font-semibold",
           "gap-5 bg-neutral-800 rounded-sm px-5 text-white border border-transparent",
           "transition-colors duration-200 hover:border-neutral-500",
-          isBondingTransaction && validator?.imageUrl ? "py-3" : "py-5"
+          isBondingOrUnbondingTransaction && validator?.imageUrl ?
+            "py-3"
+          : "py-5"
         )
       )}
     >
@@ -199,7 +211,7 @@ export const TransactionCard = ({
             <div className="relative group/tooltip">
               <CopyToClipboardControl
                 className="ml-1.5 text-neutral-400"
-                value={transaction?.txId ?? ""}
+                value={transaction?.wrapperId ?? ""}
               />
               <Tooltip position="right" className="p-2 -mr-3 w-[150px] z-10">
                 Copy transaction hash
@@ -233,7 +245,7 @@ export const TransactionCard = ({
         />
       </div>
 
-      {!isBondingTransaction && (
+      {!isBondingOrUnbondingTransaction && (
         <div className="flex flex-col">
           <h4 className={isShieldedAddress(sender ?? "") ? "text-yellow" : ""}>
             From
@@ -254,14 +266,14 @@ export const TransactionCard = ({
 
       <div className="flex flex-col">
         <h4 className={isShieldedAddress(receiver ?? "") ? "text-yellow" : ""}>
-          {isBondingTransaction ? "Validator" : "To"}
+          {isBondingOrUnbondingTransaction ? "Validator" : "To"}
         </h4>
         <h4 className={isShieldedAddress(receiver ?? "") ? "text-yellow" : ""}>
           {isShieldedAddress(receiver ?? "") ?
             <span className="flex items-center gap-1">
               <FaLock className="w-4 h-4" /> Shielded
             </span>
-          : isBondingTransaction ?
+          : isBondingOrUnbondingTransaction ?
             validator?.imageUrl ?
               <img
                 src={validator?.imageUrl}

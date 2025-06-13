@@ -28,6 +28,7 @@ export const transferKindOptions = [
   "ibcUnshieldingTransfer",
   "ibcShieldedTransfer",
   "bond",
+  "unbond",
   "received",
 ];
 
@@ -192,8 +193,13 @@ export const TransactionHistory = (): JSX.Element => {
                   },
                   {
                     id: "bond",
-                    value: "Bond",
-                    ariaLabel: "Bond",
+                    value: "Stake",
+                    ariaLabel: "Stake",
+                  },
+                  {
+                    id: "unbond",
+                    value: "Unstake",
+                    ariaLabel: "Unstake",
                   },
                 ]}
               />
@@ -210,8 +216,9 @@ export const TransactionHistory = (): JSX.Element => {
                   />
                 </svg>
                 <span>
-                  Cross-chain shielded transactions are only visible on the
-                  Namadillo where they were created.
+                  Shielded-transaction history lives only in this
+                  browser—switching URL, browser, or device will hide past
+                  shielded txs.
                 </span>
               </div>
             </div>
