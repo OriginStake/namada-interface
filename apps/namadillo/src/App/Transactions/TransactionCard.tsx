@@ -7,6 +7,7 @@ import {
   isShieldedAddress,
   isTransparentAddress,
 } from "App/Transfer/common";
+import { allDefaultAccountsAtom } from "atoms/accounts";
 import { chainAssetsMapAtom, nativeTokenAddressAtom } from "atoms/chain";
 import { TransactionHistory as TransactionHistoryType } from "atoms/transactions/atoms";
 import { allValidatorsAtom } from "atoms/validators";
@@ -25,9 +26,9 @@ import keplrSvg from "../../integrations/assets/keplr.svg";
 type Tx = TransactionHistoryType;
 type Props = { tx: Tx };
 type RawDataSection = {
-  amount?: string;
-  sources?: Array<{ amount: string; owner: string }>;
-  targets?: Array<{ amount: string; owner: string }>;
+  amount: string;
+  sources: Array<{ amount: string; owner: string }>;
+  targets: Array<{ amount: string; owner: string }>;
 };
 type BondData = {
   amount: string;
@@ -80,7 +81,8 @@ const getBondOrUnbondTransactionInfo = (
   };
 };
 const getTransactionInfo = (
-  tx: Tx["tx"]
+  tx: Tx["tx"],
+  transparentAddress: string
 ): { amount: BigNumber; sender?: string; receiver?: string } | undefined => {
   if (!tx?.data) return undefined;
 
@@ -90,22 +92,20 @@ const getTransactionInfo = (
   const source = sections.find((s) => s.sources?.length);
 
   let amount: BigNumber | undefined;
-  let receiver: string | undefined;
+  const mainTarget = target?.targets.find(
+    (src) => src.owner === transparentAddress
+  );
+  const mainSource = source?.sources.find(
+    (src) => src.owner === transparentAddress
+  );
 
-  if (target?.targets) {
-    const mainTarget = target.targets.reduce((max, cur) =>
-      new BigNumber(cur.amount).isGreaterThan(max.amount) ? cur : max
-    );
+  if (mainTarget) {
     amount = new BigNumber(mainTarget.amount);
-    receiver = mainTarget.owner;
+  } else if (mainSource) {
+    amount = new BigNumber(mainSource.amount);
   }
-  // fall back to sources only when we had no targets
-  if (!amount && source?.sources?.[0]) {
-    amount = new BigNumber(source.sources[0].amount);
-  }
-
-  const sender = sections.find((s) => s.sources?.[0]?.owner)?.sources?.[0]
-    ?.owner;
+  const receiver = target?.targets[0].owner;
+  const sender = source?.sources[0].owner;
 
   return amount ? { amount, sender, receiver } : undefined;
 };
@@ -121,10 +121,15 @@ export const TransactionCard = ({
   const isBondingOrUnbondingTransaction = ["bond", "unbond"].includes(
     transactionTopLevel?.tx?.kind ?? ""
   );
+  const { data: accounts } = useAtomValue(allDefaultAccountsAtom);
+
+  const transparentAddress =
+    accounts?.find((acc) => isTransparentAddress(acc.address))?.address ?? "";
+
   const txnInfo =
     isBondingOrUnbondingTransaction ?
       getBondOrUnbondTransactionInfo(transaction)
-    : getTransactionInfo(transaction);
+    : getTransactionInfo(transaction, transparentAddress);
   const receiver = txnInfo?.receiver;
   const sender = txnInfo?.sender;
   const isReceived = transactionTopLevel?.kind === "received";
@@ -134,13 +139,69 @@ export const TransactionCard = ({
   const validators = useAtomValue(allValidatorsAtom);
   const validator = validators?.data?.find((v) => v.address === receiver);
 
-  const getBaseAmount = (): BigNumber | undefined => {
-    if (asset && txnInfo?.amount) {
-      if (isBondingOrUnbondingTransaction)
-        return toDisplayAmount(asset, txnInfo.amount);
-      if (isNamadaAsset(asset)) return txnInfo.amount;
-      return toDisplayAmount(asset, txnInfo.amount);
-    } else return undefined;
+  const getDisplayAmount = (): BigNumber => {
+    if (!txnInfo?.amount) {
+      return BigNumber(0);
+    }
+    if (!asset) {
+      return txnInfo.amount;
+    }
+
+    // This is a temporary hack b/c NAM amounts are mixed in nam and unam for indexer before 3.2.0
+    // Whenever the migrations are run and all transactions are in micro units we need to remove this
+    // before 3.2.0 -> mixed
+    // after 3.2.0 -> unam
+    const guessIsDisplayAmount = (): boolean => {
+      // Only check Namada tokens, not other chain tokens
+      if (!isNamadaAsset(asset)) {
+        return false;
+      }
+
+      // This is a fixed flag date that most operator have already upgraded to
+      // indexer 3.2.0, meaning all transactions after this time are safe
+      const timeFlag = new Date("2025-06-18T00:00:00").getTime() / 1000;
+      const txTimestamp = transactionTopLevel.timestamp;
+      if (txTimestamp && txTimestamp > timeFlag) {
+        return false;
+      }
+
+      // If the amount contains the float dot, like "1.000000", it's nam
+      const hasFloatAmount = (): boolean => {
+        try {
+          const stringData = transactionTopLevel.tx?.data;
+          const objData = stringData ? JSON.parse(stringData) : {};
+          return [...objData.sources, ...objData.targets].find(
+            ({ amount }: { amount: string }) => amount.includes(".")
+          );
+        } catch {
+          return false;
+        }
+      };
+      if (hasFloatAmount()) {
+        return true;
+      }
+
+      // if it's a huge amount, it should be unam
+      if (txnInfo.amount.gte(new BigNumber(1_000_000))) {
+        return false;
+      }
+
+      // if it's a small amount, it should be nam
+      if (txnInfo.amount.lte(new BigNumber(10))) {
+        return true;
+      }
+
+      // if has no more hints, just accept the data as it is
+      return false;
+    };
+
+    const isAlreadyDisplayAmount = guessIsDisplayAmount();
+    if (isAlreadyDisplayAmount) {
+      // Do not transform to display amount in case it was already saved as display amount
+      return txnInfo.amount;
+    }
+
+    return toDisplayAmount(asset, txnInfo.amount);
   };
 
   const renderKeplrIcon = (address: string): JSX.Element | null => {
@@ -166,7 +227,7 @@ export const TransactionCard = ({
     return "Transfer";
   };
 
-  const baseAmount = getBaseAmount();
+  const displayAmount = getDisplayAmount();
 
   return (
     <article
@@ -240,7 +301,7 @@ export const TransactionCard = ({
         </div>
         <TokenCurrency
           className="font-semibold text-white mt-1 ml-2"
-          amount={baseAmount ?? BigNumber(0)}
+          amount={displayAmount}
           symbol={asset?.symbol ?? ""}
         />
       </div>
