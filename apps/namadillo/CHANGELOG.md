@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.31.1](https://github.com/namada-net/namada-interface/compare/namadillo@v1.31.0...namadillo@v1.31.1) (2025-07-16)
+
+
+### Bug Fixes
+
+* Update registry url to enable shielded rewards ([#2243](https://github.com/namada-net/namada-interface/issues/2243)) ([60d991f](https://github.com/namada-net/namada-interface/commit/60d991f73fc83f97cabb4b062e26ac20d5934076))
+
+## [1.31.0](https://github.com/namada-net/namada-interface/compare/namadillo@v1.30.0...namadillo@v1.31.0) (2025-07-16)
+
+
+### Features
+
+* Shielded sync retry ([#2176](https://github.com/namada-net/namada-interface/issues/2176)) ([d184643](https://github.com/namada-net/namada-interface/commit/d184643ef99d49d6015d2aca1a23de66b2b9f2c1))
+
+
+### Bug Fixes
+
+* Add chain logo back to TransactionReceipt for transparent transfers ([#2237](https://github.com/namada-net/namada-interface/issues/2237)) ([7c9c8fc](https://github.com/namada-net/namada-interface/commit/7c9c8fcd999f7b39693cdc784305328efba6136d))
+* Assets in shielded rewards calculator ([#2239](https://github.com/namada-net/namada-interface/issues/2239)) ([5614eb8](https://github.com/namada-net/namada-interface/commit/5614eb8d9863a914f8f38653b76dd76cee912f40))
+* Do not reveal pk if ibc withdrawing from masp ([#2236](https://github.com/namada-net/namada-interface/issues/2236)) ([68e68ec](https://github.com/namada-net/namada-interface/commit/68e68ec555a9440731ab051d28e460d1e7a61f6c))
+* Error notifications ([#2238](https://github.com/namada-net/namada-interface/issues/2238)) ([50d6491](https://github.com/namada-net/namada-interface/commit/50d6491c12f3161001b1b50d18338351c7508de1))
+
+## [1.30.0](https://github.com/namada-net/namada-interface/compare/namadillo@v1.29.0...namadillo@v1.30.0) (2025-07-14)
+
+
+### Features
+
+* Pick fee token with enough balance ([#2217](https://github.com/namada-net/namada-interface/issues/2217)) ([8368fa4](https://github.com/namada-net/namada-interface/commit/8368fa42d83008ff583cd7737e1a6b39b4151eab))
+
+
+### Bug Fixes
+
+* Add usdc back to select chain modal ([#2229](https://github.com/namada-net/namada-interface/issues/2229)) ([be68d95](https://github.com/namada-net/namada-interface/commit/be68d95b163514d4c0cb4ed56666e844b1944bc9))
+* Do not display refund target error for transparent ibc withdrawals ([#2220](https://github.com/namada-net/namada-interface/issues/2220)) ([7b78563](https://github.com/namada-net/namada-interface/commit/7b7856393526624a33e1ae3682485da4e171eded))
+* Reveal pk for ibc withdraw ([#2224](https://github.com/namada-net/namada-interface/issues/2224)) ([4965bfc](https://github.com/namada-net/namada-interface/commit/4965bfc59066a10a709d0768aa9600816ccf07d7))
+
 ## [1.29.0](https://github.com/anoma/namada-interface/compare/namadillo@v1.28.2...namadillo@v1.29.0) (2025-07-07)
 
 

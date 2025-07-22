@@ -291,6 +291,12 @@ export const createIbcTx = async (
         gasSpendingKey: props[0].gasSpendingKey,
         bparams,
       });
+
+      // We only check if we need to reveal the public key if the gas spending key is not provided
+      const publicKeyRevealed =
+        Boolean(msgValue.gasSpendingKey) ||
+        (await isPublicKeyRevealed(account.address));
+
       const msg: IbcTransfer = {
         type: "ibc-transfer",
         payload: {
@@ -302,6 +308,7 @@ export const createIbcTx = async (
           props: [msgValue],
           chain,
           memo,
+          publicKeyRevealed,
         },
       };
 
